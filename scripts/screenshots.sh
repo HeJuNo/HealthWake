@@ -53,6 +53,9 @@ mkdir -p "$SUPPORT/samples"
 NOW_EPOCH=$(date -u +%s)
 REF=$((NOW_EPOCH - 978307200))
 ISO=$(date -u -r "$NOW_EPOCH" +%Y-%m-%dT%H:%M:%S.000Z)
+# Ein zweiter Tag, damit das Bildschirmfoto die Tagesabschnitte des
+# Protokolls wirklich zeigt und nicht nur einen.
+ISO_GESTERN=$(date -u -r "$((NOW_EPOCH - 86400))" +%Y-%m-%dT%H:%M:%S.000Z)
 
 NOTIFICATION_CONFIG=$(printf '{"titleTemplate":"{{typeName}}","bodyTemplate":"{{value}} {{unit}} from {{source}}"}' | base64)
 HTTP_CONFIG=$(printf '{"urlTemplate":"https://example.com/hook","method":"POST","headers":{},"bodyTemplate":"{\\"value\\": {{value}}}","keychainHeaderName":null}' | base64)
@@ -84,9 +87,11 @@ JSON
 
 cat > "$SUPPORT/log.json" <<JSON
 [{"id":"CCCCCCCC-0000-0000-0000-000000000001","date":"$ISO","kind":"actionSucceeded","message":"Notification ran for Blood Glucose","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose","actionTypeID":"notification"},
- {"id":"CCCCCCCC-0000-0000-0000-000000000002","date":"$ISO","kind":"sampleReceived","message":"Blood Glucose: 212 mg/dL from Dexcom","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose"},
+ {"id":"CCCCCCCC-0000-0000-0000-000000000002","date":"$ISO","kind":"sampleReceived","message":"Blood Glucose: 212 mg/dL from Dexcom","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose","typeName":"Blood Glucose","sourceName":"Dexcom","valueText":"212 mg/dL"},
  {"id":"CCCCCCCC-0000-0000-0000-000000000003","date":"$ISO","kind":"actionFailed","message":"HTTP Request failed: status(500)","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose","actionTypeID":"httpPost"},
- {"id":"CCCCCCCC-0000-0000-0000-000000000004","date":"$ISO","kind":"deliveryEnabled","message":"Delivery switched on, watching from now"}]
+ {"id":"CCCCCCCC-0000-0000-0000-000000000004","date":"$ISO","kind":"sampleReceived","message":"Blood Glucose: 104 mg/dL from Dexcom","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose","typeName":"Blood Glucose","sourceName":"Dexcom","valueText":"104 mg/dL"},
+ {"id":"CCCCCCCC-0000-0000-0000-000000000005","date":"$ISO_GESTERN","kind":"sampleReceived","message":"Body Mass: 72.5 kg from Withings","typeIdentifier":"HKQuantityTypeIdentifierBodyMass","typeName":"Body Mass","sourceName":"Withings","valueText":"72.5 kg"},
+ {"id":"CCCCCCCC-0000-0000-0000-000000000006","date":"$ISO_GESTERN","kind":"deliveryEnabled","message":"Delivery switched on, watching from now"}]
 JSON
 
 cat > "$SUPPORT/samples/HKQuantityTypeIdentifierBloodGlucose-$(date -u +%Y-%m).jsonl" <<JSON
@@ -94,11 +99,28 @@ cat > "$SUPPORT/samples/HKQuantityTypeIdentifierBloodGlucose-$(date -u +%Y-%m).j
 {"sampleUUID":"DDDDDDDD-0000-0000-0000-000000000002","typeIdentifier":"HKQuantityTypeIdentifierBloodGlucose","typeName":"Blood Glucose","value":104,"unit":"mg/dL","date":"$ISO","sourceName":"Dexcom"}
 JSON
 
+# Die Saat wird vor jeder Aufnahme zurueckgesetzt: die App schreibt beim
+# Start selbst ins Protokoll, sonst traegt jede Aufnahme den Rest der
+# vorigen mit sich herum.
+SEED=$(mktemp -d)
+cp "$SUPPORT/subscriptions.json" "$SEED/subscriptions.json"
+cp "$SUPPORT/log.json" "$SEED/log.json"
+trap 'rm -rf "$SEED"' EXIT
+
 mkdir -p "$OUT"
 for MODE in light dark; do
   xcrun simctl ui "$UDID" appearance "$MODE" >/dev/null
   for SCREEN in types detail action log settings; do
     xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+    cp "$SEED/log.json" "$SUPPORT/log.json"
+    if [ "$SCREEN" = log ]; then
+      # Ohne Abonnement meldet die App keine Typen bei HealthKit an. Im
+      # Simulator fehlt das HealthKit-Entitlement, und die Fehler daraus
+      # verdecken sonst genau das, was dieses Bild zeigen soll.
+      echo '[]' > "$SUPPORT/subscriptions.json"
+    else
+      cp "$SEED/subscriptions.json" "$SUPPORT/subscriptions.json"
+    fi
     xcrun simctl launch "$UDID" "$BUNDLE_ID" -startScreen "$SCREEN" >/dev/null
     sleep 4
     xcrun simctl io "$UDID" screenshot "$OUT/$COMMIT-$SCREEN-$MODE.png" >/dev/null

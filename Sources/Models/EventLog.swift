@@ -21,6 +21,36 @@ struct LogEntry: Codable, Sendable, Identifiable, Equatable {
     let typeIdentifier: String?
     let actionTypeID: String?
 
+    // Dieselbe Angabe wie in `message`, nur auseinandergenommen, damit die
+    // Liste Name, App und Wert getrennt setzen kann. Nur Werteintraege
+    // fuellen sie; alles andere zeigt weiterhin `message`. Optional auch
+    // deshalb, weil Protokolle von vorher sie nicht haben.
+    let typeName: String?
+    let sourceName: String?
+    let valueText: String?
+
+    init(
+        id: UUID,
+        date: Date,
+        kind: Kind,
+        message: String,
+        typeIdentifier: String?,
+        actionTypeID: String?,
+        typeName: String? = nil,
+        sourceName: String? = nil,
+        valueText: String? = nil
+    ) {
+        self.id = id
+        self.date = date
+        self.kind = kind
+        self.message = message
+        self.typeIdentifier = typeIdentifier
+        self.actionTypeID = actionTypeID
+        self.typeName = typeName
+        self.sourceName = sourceName
+        self.valueText = valueText
+    }
+
     var isError: Bool { kind == .actionFailed || kind == .storeUnavailable }
 }
 

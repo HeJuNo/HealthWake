@@ -187,7 +187,16 @@ actor TriggerPipeline {
         for event in result.events {
             let unit = event.unit.map { " \($0)" } ?? ""
             let text = event.valueLabel ?? "\(event.value)\(unit)"
-            await append(.sampleReceived, "\(event.typeName): \(text) from \(event.sourceName)", typeIdentifier)
+            // Die Nachricht bleibt, damit der geteilte Text und aeltere
+            // Protokolle gleich aussehen; die Liste nimmt die Einzelteile.
+            await append(
+                .sampleReceived,
+                "\(event.typeName): \(text) from \(event.sourceName)",
+                typeIdentifier,
+                typeName: event.typeName,
+                sourceName: event.sourceName,
+                valueText: text
+            )
         }
         for uuid in result.deletedUUIDs {
             await append(.sampleDeleted, "Sample deleted in Health: \(uuid.uuidString)", typeIdentifier)
@@ -198,7 +207,10 @@ actor TriggerPipeline {
         _ kind: LogEntry.Kind,
         _ message: String,
         _ typeIdentifier: String?,
-        _ actionTypeID: String? = nil
+        _ actionTypeID: String? = nil,
+        typeName: String? = nil,
+        sourceName: String? = nil,
+        valueText: String? = nil
     ) async {
         // Ein Protokoll, das sich nicht schreiben laesst, darf keine Aktion
         // zu Fall bringen.
@@ -208,7 +220,10 @@ actor TriggerPipeline {
             kind: kind,
             message: message,
             typeIdentifier: typeIdentifier,
-            actionTypeID: actionTypeID
+            actionTypeID: actionTypeID,
+            typeName: typeName,
+            sourceName: sourceName,
+            valueText: valueText
         ))
     }
 }
