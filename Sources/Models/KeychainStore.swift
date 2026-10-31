@@ -12,8 +12,10 @@ enum KeychainStore {
         query[kSecValueData as String] = Data(secret.utf8)
         // Erst nach der ersten Entsperrung lesbar -- dieselbe Klasse wie die
         // uebrigen dauerhaften Daten, damit eine Aktion im Hintergrund nach
-        // einem Neustart ueberhaupt an das Geheimnis kommt.
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        // einem Neustart ueberhaupt an das Geheimnis kommt. ThisDeviceOnly,
+        // weil die Oberflaeche zusagt, dass das Geheimnis in keiner Sicherung
+        // landet.
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }

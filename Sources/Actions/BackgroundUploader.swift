@@ -67,12 +67,29 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked Sen
     /// Wird aus dem AppDelegate gerufen, wenn das System die App nur wegen
     /// fertiger Uploads geweckt hat.
     func handleEvents(completionHandler: @escaping () -> Void) {
+        // Uploads, die nach einem Neustart fertig wurden, hinterlassen ihre
+        // Rumpfdatei -- hier wird aufgeraeumt.
+        removeStaleBodies()
         lock.lock()
         finishedEvents = completionHandler
         lock.unlock()
         // Zugriff auf session, damit die Sitzung wirklich wieder entsteht --
         // ohne sie bleiben die Delegatenaufrufe aus.
         _ = session
+    }
+
+    private func removeStaleBodies() {
+        let directory = FileManager.default.temporaryDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ) else { return }
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        for file in files where file.lastPathComponent.hasPrefix("healthwake-upload-") {
+            let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            if let modified, modified > cutoff { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     // MARK: - URLSessionDelegate
