@@ -9,6 +9,19 @@ on:
     paths-ignore:
       - "**.md"
       - ".gitignore"
+    #
+    # Einzelnen Push ueberspringen: einen dieser Bausteine irgendwo in die
+    # Commit-Nachricht schreiben. GitHub wertet sie selbst aus, es braucht
+    # dafuer keine Bedingung in diesem Workflow:
+    #
+    #   [skip ci]  [ci skip]  [no ci]  [skip actions]  [actions skip]
+    #
+    # Alternativ als Trailer am Ende der Nachricht:  skip-checks: true
+    #
+    # Gilt nur fuer push und pull_request. Ein Handstart ueber "Run
+    # workflow" und der Monatslauf bauen weiterhin, egal was im Commit
+    # steht -- was auch richtig so ist: beide sind ausdrueckliche
+    # Entscheidungen, keine Nebenwirkung eines Pushes.
   schedule:
     # Am 1. jedes Monats um 06:17 UTC neu bauen, damit der TestFlight-Build
     # (90 Tage gueltig) nie ablaeuft. Abschalten: Variable SCHEDULED_BUILD=false.
