@@ -55,6 +55,7 @@ private func sampleEvent() -> HealthSampleEvent {
 @Test func unknownTypeIDHasNoAction() {
     #expect(ActionRegistry.action(for: "nope") == nil)
     #expect(ActionRegistry.action(for: NotificationAction.typeID) != nil)
+    #expect(ActionRegistry.action(for: HTTPPostAction.typeID) != nil)
 }
 
 @Test func registryIdentifiersAreUnique() {

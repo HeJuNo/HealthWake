@@ -71,6 +71,7 @@ struct AnyHealthAction: Sendable, Identifiable {
 enum ActionRegistry {
     static let all: [AnyHealthAction] = [
         AnyHealthAction(NotificationAction()),
+        AnyHealthAction(HTTPPostAction()),
     ]
 
     static func action(for typeID: String) -> AnyHealthAction? {
