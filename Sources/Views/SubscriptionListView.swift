@@ -61,7 +61,11 @@ struct SubscriptionListView: View {
         List {
             Section {
                 ForEach(subscriptions) { subscription in
-                    row(subscription)
+                    NavigationLink {
+                        SubscriptionDetailView(subscription: subscription)
+                    } label: {
+                        row(subscription)
+                    }
                 }
                 .onDelete(perform: delete)
             } footer: {
