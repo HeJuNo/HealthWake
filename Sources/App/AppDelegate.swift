@@ -15,7 +15,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Task { @MainActor in
             // Auftraege, die beim letzten Abschuss noch liefen, zuerst
             // zurueckholen -- sonst bleiben sie fuer immer "running".
+            // Nur hier: Auftraege, die beim letzten Abschuss noch liefen,
+            // zurueckholen. In jedem Durchlauf waere es falsch -- es risse
+            // einen gerade laufenden Upload aus der Bahn.
             _ = try? await environment.queue.reclaimRunning()
+            await environment.checkStorage()
             guard environment.isGloballyEnabled else { return }
             await environment.observer.registerAll(identifiers: await environment.enabledIdentifiers())
             await environment.refreshAllNow()

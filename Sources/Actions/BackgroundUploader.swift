@@ -19,14 +19,27 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked Sen
     private var bodyFiles: [Int: URL] = [:]
     private var finishedEvents: (() -> Void)?
 
-    private lazy var session: URLSession = {
+    private var sessionStorage: URLSession?
+
+    /// Nicht als "lazy var": das ist auf einer Klasse nicht threadsicher,
+    /// und zwei gleichzeitige Aufrufe wuerden zwei Sitzungen mit demselben
+    /// Bezeichner erzeugen -- laut Apple ein Fehler.
+    private var session: URLSession {
+        lock.lock()
+        defer { lock.unlock() }
+        if let sessionStorage { return sessionStorage }
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         // Nicht zeitkritisch, aber auch nicht beliebig spaet: das System soll
         // selbst entscheiden, nur eben nicht auf WLAN und Ladekabel warten.
         configuration.isDiscretionary = false
         configuration.sessionSendsLaunchEvents = true
-        return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-    }()
+        configuration.timeoutIntervalForRequest = 60
+        // Ein haengender Upload darf das Weckfenster nicht auffressen.
+        configuration.timeoutIntervalForResource = 300
+        let created = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        sessionStorage = created
+        return created
+    }
 
     /// Schickt die Anfrage los und wartet auf das Ergebnis.
     ///
@@ -35,8 +48,10 @@ final class BackgroundUploader: NSObject, URLSessionDataDelegate, @unchecked Sen
     /// dauerhafte Warteschlange: der Auftrag bleibt "running" und wird beim
     /// naechsten Start zurueckgeholt.
     func send(_ request: URLRequest, body: Data, jobID: UUID) async throws {
+        // Eigener Name je Sendung: zwei Bindungen fuer denselben Wert
+        // wuerden sich sonst dieselbe Datei teilen.
         let fileURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("healthwake-upload-\(jobID.uuidString).tmp")
+            .appendingPathComponent("healthwake-upload-\(jobID.uuidString)-\(UUID().uuidString).tmp")
         try body.write(to: fileURL, options: .atomic)
 
         try await withCheckedThrowingContinuation { (continuation: CheckedThrowingContinuation) in

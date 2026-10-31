@@ -20,7 +20,9 @@ final class AppEnvironment: ObservableObject {
 
     private static let enabledKey = "healthwake.deliveryEnabled"
 
-    private let store: any HealthStoring
+    /// Die Naht zu HealthKit. Nicht privat, weil die Diagnose in den
+    /// Einstellungen sie braucht.
+    let healthStore: any HealthStoring
     private let defaults: UserDefaults
 
     init(
@@ -29,7 +31,7 @@ final class AppEnvironment: ObservableObject {
         registry: [AnyHealthAction] = ActionRegistry.all,
         defaults: UserDefaults = .standard
     ) {
-        self.store = store
+        healthStore = store
         self.defaults = defaults
         subscriptions = SubscriptionStore(fileURL: directory.appendingPathComponent("subscriptions.json"))
         samples = SampleStore(directory: directory.appendingPathComponent("samples", isDirectory: true))
@@ -77,10 +79,26 @@ final class AppEnvironment: ObservableObject {
             // jeder Anker wird auf den aktuellen Stand gesetzt. Ein leerer
             // Anker wuerde die gesamte Historie durch jede Aktion jagen.
             for subscription in await subscriptions.all() {
-                guard let anchor = try? await store.currentAnchor(for: subscription.typeIdentifier) else { continue }
-                var updated = subscription
-                updated.anchorData = anchor
-                try? await subscriptions.upsert(updated)
+                do {
+                    let anchor = try await healthStore.currentAnchor(for: subscription.typeIdentifier)
+                    try await subscriptions.updateProgress(
+                        id: subscription.id,
+                        anchorData: anchor,
+                        lastSampleAt: subscription.lastSampleAt,
+                        lastTriggeredAt: subscription.lastTriggeredAt
+                    )
+                } catch {
+                    // Ohne frischen Anker bliebe der alte stehen, und beim
+                    // naechsten Weckruf kaeme die ganze Pause auf einmal
+                    // durch jede Aktion. Dann lieber den Typ ruhen lassen.
+                    var paused = subscription
+                    paused.isEnabled = false
+                    try? await subscriptions.updateConfiguration(paused)
+                    await append(
+                        .storeUnavailable,
+                        "Could not start watching \(subscription.typeIdentifier) from now, it stays paused: \(error)"
+                    )
+                }
             }
             await append(.deliveryEnabled, "Delivery switched on, watching from now")
             await observer.registerAll(identifiers: await enabledIdentifiers())
@@ -98,8 +116,13 @@ final class AppEnvironment: ObservableObject {
     /// HKAnchoredObjectQuery die gesamte Historie, und die erste Aktivierung
     /// von Schritten wuerde Jahre an Werten durch jede Aktion jagen.
     func addSubscription(typeIdentifier: String) async throws -> Subscription {
-        try await store.requestAuthorization(toRead: [typeIdentifier])
-        let anchor = try await store.currentAnchor(for: typeIdentifier)
+        // Zweimal derselbe Typ waere ein Eintrag, der nie ausloest: gesucht
+        // wird immer der erste. Also gar nicht erst anlegen.
+        if await subscriptions.subscription(forTypeIdentifier: typeIdentifier) != nil {
+            throw AppEnvironmentError.alreadyWatched
+        }
+        try await healthStore.requestAuthorization(toRead: [typeIdentifier])
+        let anchor = try await healthStore.currentAnchor(for: typeIdentifier)
         let subscription = Subscription(
             id: UUID(),
             typeIdentifier: typeIdentifier,
@@ -127,9 +150,27 @@ final class AppEnvironment: ObservableObject {
     }
 
     func setSubscription(_ subscription: Subscription) async {
-        try? await subscriptions.upsert(subscription)
-        if isGloballyEnabled {
-            await observer.registerAll(identifiers: await enabledIdentifiers())
+        let before = await enabledIdentifiers()
+        // Nur die Einstellung schreiben: der Anker gehoert der
+        // Verarbeitungskette, und die Oberflaeche haelt eine alte Kopie.
+        try? await subscriptions.updateConfiguration(subscription)
+        let after = await enabledIdentifiers()
+        // Neu anmelden nur, wenn sich die beobachtete Menge wirklich
+        // geaendert hat -- sonst risse jeder Tastendruck im Filterfeld alle
+        // Abfragen ab.
+        if isGloballyEnabled, Set(before) != Set(after) {
+            await observer.registerAll(identifiers: after)
+        }
+    }
+
+    /// Meldet eine beiseitegelegte, unlesbare Abonnementdatei im Protokoll.
+    func checkStorage() async {
+        try? await subscriptions.load()
+        if let aside = await subscriptions.corruptFileURL {
+            await append(
+                .storeUnavailable,
+                "The subscriptions file could not be read and was kept as \(aside.lastPathComponent)"
+            )
         }
     }
 
@@ -155,4 +196,8 @@ final class AppEnvironment: ObservableObject {
             actionTypeID: nil
         ))
     }
+}
+
+enum AppEnvironmentError: Error, Equatable {
+    case alreadyWatched
 }

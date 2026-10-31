@@ -28,36 +28,45 @@ enum Template {
 
     static func render(_ template: String, event: HealthSampleEvent, context: TemplateContext) -> String {
         var result = ""
-        var rest = Substring(template)
+        // Im JSON-Zusammenhang zaehlt, ob der Platzhalter innerhalb einer
+        // Zeichenkette steht -- und zwar an beliebiger Stelle, nicht nur
+        // direkt zwischen zwei Anfuehrungszeichen. "{{a}}: {{b}}" ist eine
+        // Zeichenkette mit zwei Platzhaltern darin.
+        var insideString = false
+        var escaped = false
+        var index = template.startIndex
 
-        while let open = rest.range(of: "{{") {
-            result += rest[rest.startIndex..<open.lowerBound]
-            let afterOpen = rest[open.upperBound...]
-            guard let close = afterOpen.range(of: "}}") else {
-                // Keine schliessende Klammer mehr: der Rest ist gewoehnlicher Text.
-                result += rest[open.lowerBound...]
-                return result
-            }
-            let name = String(afterOpen[afterOpen.startIndex..<close.lowerBound])
-                .trimmingCharacters(in: .whitespaces)
-
-            guard let value = value(named: name, of: event) else {
-                // Unbekannter Platzhalter bleibt unangetastet stehen -- eine
-                // stille Leerstelle waere schlimmer als ein sichtbarer Fehler.
-                result += "{{" + String(afterOpen[afterOpen.startIndex..<close.lowerBound]) + "}}"
-                rest = afterOpen[close.upperBound...]
+        while index < template.endIndex {
+            if template[index...].hasPrefix("{{"),
+               let close = template.range(of: "}}", range: index..<template.endIndex) {
+                let nameStart = template.index(index, offsetBy: 2)
+                let raw = String(template[nameStart..<close.lowerBound])
+                let name = raw.trimmingCharacters(in: .whitespaces)
+                if let value = value(named: name, of: event) {
+                    result += render(value, context: context, insideQuotes: context == .json && insideString)
+                } else {
+                    // Unbekannter Platzhalter bleibt unangetastet stehen --
+                    // eine stille Leerstelle waere schlimmer als ein
+                    // sichtbarer Fehler.
+                    result += "{{" + raw + "}}"
+                }
+                index = close.upperBound
                 continue
             }
 
-            // Steht der Platzhalter schon in Anfuehrungszeichen, wird nur der
-            // Inhalt ersetzt -- sonst entstuenden doppelte Anfuehrungszeichen.
-            let insideQuotes = context == .json
-                && result.hasSuffix("\"")
-                && afterOpen[close.upperBound...].first == "\""
-            result += render(value, context: context, insideQuotes: insideQuotes)
-            rest = afterOpen[close.upperBound...]
+            let character = template[index]
+            if context == .json {
+                if escaped {
+                    escaped = false
+                } else if character == "\\", insideString {
+                    escaped = true
+                } else if character == "\"" {
+                    insideString.toggle()
+                }
+            }
+            result.append(character)
+            index = template.index(after: index)
         }
-        result += rest
         return result
     }
 

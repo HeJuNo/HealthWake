@@ -132,6 +132,8 @@ struct SubscriptionListView: View {
         do {
             _ = try await environment.addSubscription(typeIdentifier: identifier)
             await reload()
+        } catch AppEnvironmentError.alreadyWatched {
+            errorMessage = "That type is already being watched."
         } catch {
             errorMessage = String(describing: error)
         }

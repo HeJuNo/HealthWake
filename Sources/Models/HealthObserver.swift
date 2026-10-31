@@ -18,7 +18,7 @@ final class HealthObserver {
     private let pipeline: TriggerPipeline
     private let log: EventLog
     private let healthStore = HKHealthStore()
-    private var queries: [HKObserverQuery] = []
+    private var queries: [String: HKObserverQuery] = [:]
 
     init(store: any HealthStoring, pipeline: TriggerPipeline, log: EventLog) {
         self.store = store
@@ -30,9 +30,27 @@ final class HealthObserver {
     /// Hintergrundzustellung ein. Muss nach jedem Start wieder laufen:
     /// Observer-Abfragen leben nur, solange der Prozess lebt.
     func registerAll(identifiers: [String]) async {
-        await unregisterAll()
-        for identifier in identifiers {
-            guard let type = try? LiveHealthStore.sampleType(for: identifier) else { continue }
+        let wanted = Set(identifiers)
+        let removed = queries.keys.filter { !wanted.contains($0) }
+        for identifier in removed {
+            if let query = queries[identifier] { healthStore.stop(query) }
+            queries[identifier] = nil
+        }
+        // Die Naht kann Hintergrundzustellung nur fuer alles auf einmal
+        // abschalten. Deshalb nur dann, wenn wirklich ein Typ wegfaellt --
+        // und danach die verbliebenen wieder an.
+        if !removed.isEmpty {
+            try? await store.disableAllBackgroundDelivery()
+            for identifier in queries.keys {
+                await enableDelivery(for: identifier)
+            }
+        }
+
+        for identifier in wanted where queries[identifier] == nil {
+            guard let type = try? LiveHealthStore.sampleType(for: identifier) else {
+                await log(.storeUnavailable, "Unknown health type: \(identifier)", identifier)
+                continue
+            }
             let query = HKObserverQuery(sampleType: type, predicate: nil) { [weak self] _, completionHandler, error in
                 guard let self else {
                     // Ohne Beobachter gibt es nichts zu tun -- aber der
@@ -55,17 +73,37 @@ final class HealthObserver {
                 }
             }
             healthStore.execute(query)
-            queries.append(query)
-            // Immer .immediate: iOS deckelt die Haeufigkeit je Typ selbst,
-            // und die App soll das nicht erraten (Spec 9).
-            try? await store.enableBackgroundDelivery(for: identifier, frequency: .immediate)
+            queries[identifier] = query
+            await enableDelivery(for: identifier)
+        }
+    }
+
+    /// Immer .immediate: iOS deckelt die Haeufigkeit je Typ selbst, und die
+    /// App soll das nicht erraten (Spec 9). Scheitert es, steht der Typ
+    /// still -- das muss im Protokoll stehen, sonst sucht man ewig.
+    private func enableDelivery(for identifier: String) async {
+        do {
+            try await store.enableBackgroundDelivery(for: identifier, frequency: .immediate)
+        } catch {
+            await log(.storeUnavailable, "Background delivery could not be switched on: \(error)", identifier)
         }
     }
 
     func unregisterAll() async {
-        for query in queries { healthStore.stop(query) }
+        for query in queries.values { healthStore.stop(query) }
         queries.removeAll()
         try? await store.disableAllBackgroundDelivery()
+    }
+
+    private func log(_ kind: LogEntry.Kind, _ message: String, _ typeIdentifier: String?) async {
+        try? await log.append(LogEntry(
+            id: UUID(),
+            date: Date(),
+            kind: kind,
+            message: message,
+            typeIdentifier: typeIdentifier,
+            actionTypeID: nil
+        ))
     }
 
     /// Ein Weckruf. Reihenfolge nach Spec 7.2: erst verarbeiten, dann

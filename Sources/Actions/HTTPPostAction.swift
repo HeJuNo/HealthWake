@@ -19,6 +19,10 @@ struct HTTPPostAction: HealthAction {
         /// Name der Kopfzeile, deren Wert im Schluesselbund steht, etwa
         /// "Authorization". Der Wert selbst steht hier nicht.
         var keychainHeaderName: String?
+        /// Schluessel dieses Geheimnisses im Schluesselbund. Je Bindung
+        /// einer -- sonst teilten sich zwei Ziele mit derselben Kopfzeile
+        /// ein Geheimnis, und das eine bekaeme den Token des anderen.
+        var secretID: String?
     }
 
     static let typeID = "httpPost"
@@ -28,7 +32,8 @@ struct HTTPPostAction: HealthAction {
         method: "POST",
         headers: [:],
         bodyTemplate: Template.defaultJSONBody(),
-        keychainHeaderName: nil
+        keychainHeaderName: nil,
+        secretID: nil
     )
 
     /// Pruefbare Naht: alles, was an der Anfrage schiefgehen kann, entsteht
@@ -65,13 +70,21 @@ struct HTTPPostAction: HealthAction {
             request.setValue(sanitizedHeaderValue(secret), forHTTPHeaderField: headerName)
         }
 
-        let body = Data(Template.render(config.bodyTemplate, event: event, context: .json).utf8)
+        // Die Maskierung richtet sich nach dem Inhaltstyp: ein Formular
+        // oder reiner Text darf nicht wie JSON maskiert werden.
+        let contentType = request.value(forHTTPHeaderField: "Content-Type") ?? ""
+        let bodyContext: TemplateContext = contentType.lowercased().contains("json") ? .json : .plain
+        let body = Data(Template.render(config.bodyTemplate, event: event, context: bodyContext).utf8)
         return (request, body)
     }
 
-    /// Schluesselbundkonto fuer das Geheimnis einer Kopfzeile.
+    /// Schluesselbundkonto fuer das Geheimnis einer Bindung.
     static func keychainAccount(for config: Config) -> String? {
-        config.keychainHeaderName.map { "httpPost.\($0)" }
+        guard config.keychainHeaderName != nil else { return nil }
+        if let secretID = config.secretID { return "httpPost.\(secretID)" }
+        // Aeltere Einstellungen ohne eigenen Schluessel: Rueckfall auf den
+        // Kopfzeilennamen, damit ein vorhandenes Geheimnis lesbar bleibt.
+        return config.keychainHeaderName.map { "httpPost.\($0)" }
     }
 
     func perform(event: HealthSampleEvent, config: Config) async throws {

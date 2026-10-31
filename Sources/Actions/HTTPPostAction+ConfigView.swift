@@ -149,6 +149,12 @@ struct HTTPConfigView: View {
     }
 
     private func saveSecret(_ value: String) {
+        // Jede Bindung bekommt beim ersten Geheimnis ihren eigenen
+        // Schluessel, damit zwei Ziele mit derselben Kopfzeile nicht
+        // denselben Token benutzen.
+        if config.secretID == nil, config.keychainHeaderName != nil {
+            config.secretID = UUID().uuidString
+        }
         guard let account = HTTPPostAction.keychainAccount(for: config) else { return }
         if value.isEmpty {
             KeychainStore.remove(account: account)

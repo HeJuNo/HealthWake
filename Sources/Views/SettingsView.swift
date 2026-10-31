@@ -7,6 +7,9 @@ import UIKit
 struct SettingsView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var storedSize = ""
+    @State private var diagnosis: [DiagnosisModel.Row] = []
+    @State private var notificationStatus = ""
+    @State private var isHealthAvailable = true
     @State private var isClearing = false
     @State private var showClearConfirmation = false
 
@@ -19,7 +22,10 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
-            .task { await refreshSize() }
+            .task {
+                await refreshSize()
+                await refreshDiagnosis()
+            }
             .confirmationDialog(
                 "Delete all recorded entries?",
                 isPresented: $showClearConfirmation,
@@ -55,6 +61,11 @@ struct SettingsView: View {
                 showClearConfirmation = true
             }
             .disabled(isClearing)
+            Button("Clear finished and failed actions") {
+                Task {
+                    try? await environment.queue.clearFinished()
+                }
+            }
         } header: {
             Text("Storage")
         } footer: {
@@ -64,6 +75,11 @@ struct SettingsView: View {
 
     private var diagnosisSection: some View {
         Section {
+            LabeledContent("Health data on this device", value: isHealthAvailable ? "Available" : "Not available")
+            LabeledContent("Notifications", value: notificationStatus)
+            ForEach(diagnosis) { row in
+                LabeledContent(row.name, value: row.wouldPrompt ? "Health would still ask" : "Health has been asked")
+            }
             Button {
                 openHealthApp()
             } label: {
@@ -94,6 +110,13 @@ struct SettingsView: View {
     private func openHealthApp() {
         guard let url = URL(string: "x-apple-health://") else { return }
         UIApplication.shared.open(url)
+    }
+
+    private func refreshDiagnosis() async {
+        let model = DiagnosisModel(store: environment.healthStore, subscriptions: environment.subscriptions)
+        isHealthAvailable = model.isHealthDataAvailable
+        diagnosis = await model.rows()
+        notificationStatus = await model.notificationStatusText()
     }
 
     private func refreshSize() async {

@@ -114,11 +114,14 @@ actor TriggerPipeline {
             let accepted = try await queue.enqueue(jobs)
             progress(.jobsEnqueued)
 
-            var updated = subscription
-            updated.anchorData = result.newAnchor
-            updated.lastSampleAt = result.events.map(\.date).max() ?? subscription.lastSampleAt
-            updated.lastTriggeredAt = lastTriggeredAt
-            try await subscriptions.upsert(updated)
+            // Nur der Fortschritt, nicht der ganze Datensatz: waehrend der
+            // Abfrage kann der Benutzer den Filter geaendert haben.
+            try await subscriptions.updateProgress(
+                id: subscription.id,
+                anchorData: result.newAnchor,
+                lastSampleAt: result.events.map(\.date).max() ?? subscription.lastSampleAt,
+                lastTriggeredAt: lastTriggeredAt
+            )
             progress(.anchorPersisted)
 
             await logSamples(result, typeIdentifier: typeIdentifier)
