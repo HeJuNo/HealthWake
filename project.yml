@@ -47,8 +47,13 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
-        # Nur Lesezugriff. Geschrieben wird nach Health nicht, deshalb
-        # kein NSHealthUpdateUsageDescription.
         NSHealthShareUsageDescription: >-
           HealthWake beobachtet die von dir ausgewaehlten Werte und fuehrt
           bei neuen Eintraegen die eingestellten Aktionen aus.
+        # Pflicht, sobald das HealthKit-Entitlement gesetzt ist -- altool
+        # prueft statisch und weist den Upload sonst mit 90683 zurueck,
+        # auch wenn die App nie schreibt. Der Text wird deshalb nie
+        # angezeigt: requestAuthorization wird nur mit read aufgerufen.
+        NSHealthUpdateUsageDescription: >-
+          HealthWake schreibt keine Werte nach Health. Die App liest
+          ausschliesslich die von dir ausgewaehlten Eintraege.
