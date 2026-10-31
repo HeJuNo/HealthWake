@@ -43,4 +43,8 @@ struct Subscription: Codable, Sendable, Identifiable, Equatable {
     /// verraet nicht, ob der Benutzer Lesen erlaubt hat, nur ob noch gefragt
     /// werden muss -- deshalb hier gemerkt.
     var authorizationRequested: Bool
+    /// Wann das Abonnement angelegt wurde. Noetig fuer den Zustand
+    /// "wartet auf den ersten Eintrag seit ..." -- vorher gibt es keinen
+    /// anderen Zeitpunkt, auf den sich die Oberflaeche beziehen koennte.
+    var createdAt: Date = Date()
 }

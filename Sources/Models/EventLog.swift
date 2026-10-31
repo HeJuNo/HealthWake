@@ -71,8 +71,7 @@ actor EventLog {
 
     private func load() -> [LogEntry] {
         if let loaded { return loaded }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONCoding.readableDecoder()
         guard let data = try? Data(contentsOf: fileURL),
               let entries = try? decoder.decode([LogEntry].self, from: data)
         else {
@@ -84,8 +83,7 @@ actor EventLog {
     }
 
     private func write(_ entries: [LogEntry]) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        let encoder = JSONCoding.readableEncoder()
         let data = try encoder.encode(entries)
         try data.write(to: fileURL, options: .atomic)
         // Nach dem atomaren Schreiben, weil dabei eine neue Datei entsteht.

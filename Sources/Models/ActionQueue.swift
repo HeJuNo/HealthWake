@@ -50,7 +50,7 @@ actor ActionQueue {
     private var jobs: [UUID: ActionJob] = [:]
     private var didLoad = false
 
-    init(fileURL: URL, now: @Sendable @escaping () -> Date = Date.init) {
+    init(fileURL: URL, now: @Sendable @escaping () -> Date = { Date() }) {
         self.fileURL = fileURL
         self.now = now
     }
@@ -154,8 +154,7 @@ actor ActionQueue {
     private func load() {
         guard !didLoad else { return }
         didLoad = true
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONCoding.exactDecoder()
         guard let data = try? Data(contentsOf: fileURL) else { return }
         for line in data.split(separator: UInt8(ascii: "\n")) where !line.isEmpty {
             // Eine abgeschnittene Zeile wird uebersprungen, der Rest bleibt gueltig.
@@ -165,9 +164,7 @@ actor ActionQueue {
     }
 
     private func write(_ changed: [ActionJob]) throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = []
+        let encoder = JSONCoding.exactEncoder()
         var data = Data()
         for job in changed {
             data.append(try encoder.encode(job))

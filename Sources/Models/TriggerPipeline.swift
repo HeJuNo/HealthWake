@@ -44,7 +44,7 @@ actor TriggerPipeline {
         queue: ActionQueue,
         log: EventLog,
         registry: [AnyHealthAction],
-        now: @Sendable @escaping () -> Date = Date.init,
+        now: @Sendable @escaping () -> Date = { Date() },
         progress: @Sendable @escaping (Step) -> Void = { _ in }
     ) {
         self.store = store

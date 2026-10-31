@@ -32,10 +32,7 @@ struct SampleStore: Sendable {
         guard !events.isEmpty else { return }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        // Keine schoene Formatierung: ein Ereignis muss genau eine Zeile sein.
-        encoder.outputFormatting = []
+        let encoder = JSONCoding.readableEncoder()
 
         var batches: [String: Data] = [:]
         for event in events {
@@ -70,8 +67,7 @@ struct SampleStore: Sendable {
     /// Zeilen, die sich nicht entschluesseln lassen -- etwa eine beim
     /// Absturz abgeschnittene letzte Zeile -- werden uebersprungen.
     func events(forTypeIdentifier identifier: String) throws -> [HealthSampleEvent] {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONCoding.readableDecoder()
         var result: [HealthSampleEvent] = []
         for url in try files().filter({ $0.lastPathComponent.hasPrefix(identifier + "-") }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             guard let data = try? Data(contentsOf: url) else { continue }

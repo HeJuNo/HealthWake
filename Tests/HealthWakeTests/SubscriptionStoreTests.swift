@@ -75,3 +75,15 @@ private func makeSubscription(type: String = "HKQuantityTypeIdentifierBodyMass")
     let data = try JSONEncoder().encode(filter)
     #expect(try JSONDecoder().decode(SubscriptionFilter.self, from: data) == filter)
 }
+
+@Test func exactDatesSurviveTheRoundTripToTheLastBit() throws {
+    // Der Umweg ueber "Sekunden seit 1970" verliert Stellen; genau daran
+    // ist dieser Test einmal gescheitert.
+    let dates = (0..<200).map { _ in Date() }
+    let encoder = JSONCoding.exactEncoder()
+    let decoder = JSONCoding.exactDecoder()
+    for date in dates {
+        let decoded = try decoder.decode(Date.self, from: try encoder.encode(date))
+        #expect(decoded == date)
+    }
+}

@@ -93,6 +93,46 @@ final class AppEnvironment: ObservableObject {
     /// Holt nach, was waehrend einer Pause angefallen ist -- beim Start, beim
     /// Wechsel in den Vordergrund und sobald die Daten nach dem Entsperren
     /// wieder lesbar sind.
+    /// Legt ein Abonnement an: fragen, Anker auf "jetzt" setzen, speichern,
+    /// anmelden. Der Anker ist der ganze Punkt -- mit nil liefert
+    /// HKAnchoredObjectQuery die gesamte Historie, und die erste Aktivierung
+    /// von Schritten wuerde Jahre an Werten durch jede Aktion jagen.
+    func addSubscription(typeIdentifier: String) async throws -> Subscription {
+        try await store.requestAuthorization(toRead: [typeIdentifier])
+        let anchor = try await store.currentAnchor(for: typeIdentifier)
+        let subscription = Subscription(
+            id: UUID(),
+            typeIdentifier: typeIdentifier,
+            isEnabled: true,
+            filter: SubscriptionFilter(),
+            actions: [],
+            anchorData: anchor,
+            lastSampleAt: nil,
+            lastTriggeredAt: nil,
+            authorizationRequested: true,
+            createdAt: Date()
+        )
+        try await subscriptions.upsert(subscription)
+        if isGloballyEnabled {
+            await observer.registerAll(identifiers: await enabledIdentifiers())
+        }
+        return subscription
+    }
+
+    func removeSubscription(id: UUID) async {
+        try? await subscriptions.remove(id: id)
+        if isGloballyEnabled {
+            await observer.registerAll(identifiers: await enabledIdentifiers())
+        }
+    }
+
+    func setSubscription(_ subscription: Subscription) async {
+        try? await subscriptions.upsert(subscription)
+        if isGloballyEnabled {
+            await observer.registerAll(identifiers: await enabledIdentifiers())
+        }
+    }
+
     func refreshAllNow() async {
         guard isGloballyEnabled else { return }
         for identifier in await enabledIdentifiers() {

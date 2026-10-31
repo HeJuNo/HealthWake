@@ -20,8 +20,7 @@ actor SubscriptionStore {
             subscriptions = []
             return
         }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = JSONCoding.exactDecoder()
         subscriptions = try decoder.decode([Subscription].self, from: data)
     }
 
@@ -57,8 +56,7 @@ actor SubscriptionStore {
     }
 
     private func write() throws {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        let encoder = JSONCoding.exactEncoder()
         let data = try encoder.encode(subscriptions)
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
