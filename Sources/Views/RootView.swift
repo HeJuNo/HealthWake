@@ -6,7 +6,7 @@ struct RootView: View {
         TabView {
             SubscriptionListView()
                 .tabItem { Label("Types", systemImage: "heart.text.square") }
-            LogView()
+            EventLogView()
                 .tabItem { Label("Log", systemImage: "list.bullet.rectangle") }
             SettingsView()
                 .tabItem { Label("Settings", systemImage: "gearshape") }
