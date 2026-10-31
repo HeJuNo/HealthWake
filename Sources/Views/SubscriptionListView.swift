@@ -8,9 +8,10 @@ struct SubscriptionListView: View {
     @State private var subscriptions: [Subscription] = []
     @State private var isAddingType = false
     @State private var errorMessage: String?
+    @State private var path: [Subscription] = []
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if subscriptions.isEmpty {
                     emptyState
@@ -38,7 +39,17 @@ struct SubscriptionListView: View {
             } message: {
                 Text(errorMessage ?? "")
             }
-            .task { await reload() }
+            .navigationDestination(for: Subscription.self) { subscription in
+                SubscriptionDetailView(subscription: subscription)
+            }
+            .task {
+                await reload()
+                // Nur fuer die Bildschirmfotos: direkt ins Detail springen.
+                let screen = StartScreen.current
+                if screen == .detail || screen == .action, let first = subscriptions.first {
+                    path = [first]
+                }
+            }
             .refreshable {
                 await environment.refreshAllNow()
                 await reload()
@@ -61,9 +72,7 @@ struct SubscriptionListView: View {
         List {
             Section {
                 ForEach(subscriptions) { subscription in
-                    NavigationLink {
-                        SubscriptionDetailView(subscription: subscription)
-                    } label: {
+                    NavigationLink(value: subscription) {
                         row(subscription)
                     }
                 }

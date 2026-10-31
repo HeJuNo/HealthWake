@@ -5,6 +5,7 @@ struct SubscriptionDetailView: View {
     @EnvironmentObject private var environment: AppEnvironment
     @State private var subscription: Subscription
     @State private var notificationsDenied = false
+    @State private var openedAction: ActionBinding?
 
     init(subscription: Subscription) {
         _subscription = State(initialValue: subscription)
@@ -25,6 +26,13 @@ struct SubscriptionDetailView: View {
         }
         .navigationTitle(descriptor?.displayName ?? subscription.typeIdentifier)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $openedAction) { binding in
+            configView(for: binding, action: ActionRegistry.action(for: binding.actionTypeID))
+        }
+        .task {
+            // Nur fuer die Bildschirmfotos: die erste Aktion gleich oeffnen.
+            if StartScreen.current == .action { openedAction = subscription.actions.first }
+        }
         .onChange(of: subscription) { _, updated in
             Task { await environment.setSubscription(updated) }
         }

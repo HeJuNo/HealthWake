@@ -2,8 +2,8 @@ import Foundation
 
 /// Die Bedingungen, unter denen ein neuer Eintrag die Aktionen ausloest.
 /// Alle drei Bedingungen gelten gleichzeitig.
-struct SubscriptionFilter: Codable, Sendable, Equatable {
-    enum Threshold: Codable, Sendable, Equatable {
+struct SubscriptionFilter: Codable, Sendable, Equatable, Hashable {
+    enum Threshold: Codable, Sendable, Equatable, Hashable {
         case none
         case above(Double)
         case below(Double)
@@ -20,7 +20,7 @@ struct SubscriptionFilter: Codable, Sendable, Equatable {
 /// Eine Aktion in ihrer Einstellung, wie sie an einem Abonnement haengt.
 /// configData ist die kodierte Config der jeweiligen Aktion -- das Abonnement
 /// muss deren Typ nicht kennen.
-struct ActionBinding: Codable, Sendable, Identifiable, Equatable {
+struct ActionBinding: Codable, Sendable, Identifiable, Equatable, Hashable {
     let id: UUID
     var actionTypeID: String
     var configData: Data
@@ -29,7 +29,7 @@ struct ActionBinding: Codable, Sendable, Identifiable, Equatable {
 
 /// Ein beobachteter Health-Typ mit Filter, Aktionen und dem Anker, bis zu
 /// dem die Werte verarbeitet sind.
-struct Subscription: Codable, Sendable, Identifiable, Equatable {
+struct Subscription: Codable, Sendable, Identifiable, Equatable, Hashable {
     let id: UUID
     var typeIdentifier: String
     var isEnabled: Bool

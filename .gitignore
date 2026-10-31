@@ -28,3 +28,4 @@ AuthKey_*.p8
 # macOS
 .DS_Store
 ._*
+screenshots/
