@@ -28,3 +28,7 @@ struct PlaceholderView: View {
         .padding()
     }
 }
+
+/// Ankerklasse fuer Bundle(for:) in den Tests. Eine Klasse ist noetig,
+/// weil Bundle(for:) eine AnyClass erwartet.
+final class HealthWakeMarker {}

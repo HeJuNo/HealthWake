@@ -19,7 +19,9 @@ targets:
     sources:
       - Sources
       - Assets.xcassets
-    scheme: {}
+    scheme:
+      testTargets:
+        - HealthWakeTests
     settings:
       base:
         # Platzhalter fuer lokale Builds. Der GitHub-Build setzt
@@ -62,3 +64,19 @@ targets:
         NSHealthUpdateUsageDescription: >-
           HealthWake never writes to Health. It only reads the entries
           you select.
+
+  # Unit-Tests laufen im Simulator im App-Prozess (TEST_HOST), damit
+  # @testable import HealthWake das App-Modul sieht.
+  HealthWakeTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - Tests
+    dependencies:
+      - target: HealthWake
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.healthwake.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
