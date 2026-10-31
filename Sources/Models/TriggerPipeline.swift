@@ -36,6 +36,8 @@ actor TriggerPipeline {
     private let registry: [AnyHealthAction]
     private let now: @Sendable () -> Date
     private let progress: @Sendable (Step) -> Void
+    private var inFlight: [String: Task<Outcome, Never>] = [:]
+    private var isDraining = false
 
     init(
         store: any HealthStoring,
@@ -57,7 +59,22 @@ actor TriggerPipeline {
         self.progress = progress
     }
 
+    /// Zwei Weckrufe fuer denselben Typ duerfen nicht nebeneinander laufen
+    /// -- ein Aktor haelt zwar jeden einzelnen Schritt zusammen, gibt aber
+    /// an jedem await ab. Der zweite Aufrufer wartet deshalb auf das
+    /// Ergebnis des ersten, statt dieselben Werte noch einmal zu verarbeiten.
     func handleUpdate(for typeIdentifier: String) async -> Outcome {
+        if let running = inFlight[typeIdentifier] {
+            return await running.value
+        }
+        let task = Task { await self.performUpdate(for: typeIdentifier) }
+        inFlight[typeIdentifier] = task
+        let outcome = await task.value
+        inFlight[typeIdentifier] = nil
+        return outcome
+    }
+
+    private func performUpdate(for typeIdentifier: String) async -> Outcome {
         guard let subscription = await subscriptions.subscription(forTypeIdentifier: typeIdentifier),
               subscription.isEnabled
         else { return .noSubscription }
@@ -121,16 +138,25 @@ actor TriggerPipeline {
     /// Die Frist ist das Weckfenster: was nicht mehr hineinpasst, bleibt
     /// liegen und kommt beim naechsten Weckruf dran.
     func drainQueue(deadline: Date) async {
-        // Auftraege, die beim letzten Abschuss noch liefen, zuerst zurueckholen.
-        _ = try? await queue.reclaimRunning()
+        // Zweimal gleichzeitig abarbeiten hiesse zweimal senden. Das Wecken
+        // kommt aus sechs Richtungen -- Start, Vordergrund, Entsperren,
+        // Weckruf, Ziehen zum Aktualisieren, Wiederholung von Hand --,
+        // deshalb der Riegel.
+        guard !isDraining else { return }
+        isDraining = true
+        defer { isDraining = false }
 
-        while now() < deadline, let job = await queue.nextDue() {
+        while now() < deadline {
+            // Holen und auf "laeuft" setzen in einem Zug; "zurueckholen"
+            // gehoert an den Programmstart, nicht hierher -- sonst risse es
+            // einen gerade laufenden Upload aus der Bahn und schickte ihn
+            // ein zweites Mal.
+            guard let job = (try? await queue.claimNextDue()) ?? nil else { break }
             guard let action = registry.first(where: { $0.typeID == job.actionTypeID }) else {
                 try? await queue.markFailed(job.id, error: "Unknown action \(job.actionTypeID)")
                 await append(.actionFailed, "Unknown action \(job.actionTypeID)", job.event.typeIdentifier, job.actionTypeID)
                 continue
             }
-            try? await queue.markRunning(job.id)
             do {
                 try await action.perform(job.event, job.configData)
                 try? await queue.markDone(job.id)

@@ -53,9 +53,23 @@ struct SampleStore: Sendable {
                     throw CocoaError(.fileWriteUnknown)
                 }
             }
-            let handle = try FileHandle(forWritingTo: url)
+            // forUpdating, nicht forWritingTo: das letzte Byte muss gelesen
+            // werden, und aus einem reinen Schreibgriff laesst sich nicht lesen.
+            let handle = try FileHandle(forUpdating: url)
             defer { try? handle.close() }
             try handle.seekToEnd()
+            // Ein Abschuss kann die letzte Zeile halbiert haben. Ohne diesen
+            // Zeilenumbruch verschmilzt der neue Wert mit dem kaputten Rest
+            // und waere fuer immer unlesbar.
+            let end = try handle.offset()
+            if end > 0 {
+                try handle.seek(toOffset: end - 1)
+                let last = try handle.read(upToCount: 1)
+                try handle.seek(toOffset: end)
+                if last != Data([UInt8(ascii: "\n")]) {
+                    try handle.write(contentsOf: Data([UInt8(ascii: "\n")]))
+                }
+            }
             try handle.write(contentsOf: data)
             // Pflicht, nicht Vorsicht: ohne fsync kann der Anker vor den
             // Werten auf der Platte stehen.
@@ -77,7 +91,14 @@ struct SampleStore: Sendable {
                 }
             }
         }
-        return result.sorted { $0.date < $1.date }
+        // Derselbe Wert kann zweimal in der Datei stehen: HealthKit stellt
+        // gelegentlich doppelt zu, und ein Abschuss zwischen Werteschreiben
+        // und Anker laesst denselben Wert beim naechsten Weckruf noch einmal
+        // ankommen. Beim Lesen zaehlt er einmal.
+        var seen = Set<UUID>()
+        return result
+            .filter { seen.insert($0.sampleUUID).inserted }
+            .sorted { $0.date < $1.date }
     }
 
     func totalByteCount() throws -> Int64 {

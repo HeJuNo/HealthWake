@@ -42,6 +42,8 @@ actor ActionQueue {
     /// Nach so vielen Fehlversuchen gilt ein Auftrag als gescheitert und
     /// wartet auf eine Wiederholung von Hand.
     static let maxAttempts = 5
+    /// Unter so vielen Zeilen lohnt das Neuschreiben nicht.
+    static let compactionFloor = 32
 
     private let fileURL: URL
     private let now: @Sendable () -> Date
@@ -86,6 +88,35 @@ actor ActionQueue {
         for job in reclaimed { remember(job) }
         try write(reclaimed)
         return reclaimed.count
+    }
+
+    /// Nimmt den naechsten faelligen Auftrag und markiert ihn in einem Zug
+    /// als laufend. Zwei getrennte Schritte (erst holen, dann markieren)
+    /// waeren hier eine Luecke: zwischen zwei await kann ein zweiter
+    /// Durchlauf denselben Auftrag greifen und die Aktion liefe doppelt.
+    func claimNextDue() async throws -> ActionJob? {
+        load()
+        let current = now()
+        guard var job = order
+            .compactMap({ jobs[$0] })
+            .filter({ $0.state == .pending && $0.nextAttemptAt <= current })
+            .min(by: { $0.nextAttemptAt < $1.nextAttemptAt })
+        else { return nil }
+        job.state = .running
+        remember(job)
+        try write([job])
+        return job
+    }
+
+    /// Erledigte und gescheiterte Auftraege wegwerfen. Das kostet das
+    /// Entdoppelungsgedaechtnis fuer diese Auftraege -- deshalb nur auf
+    /// ausdrueckliche Anweisung aus den Einstellungen.
+    func clearFinished() async throws {
+        load()
+        let keep = order.compactMap { jobs[$0] }.filter { $0.state == .pending || $0.state == .running }
+        order = keep.map(\.id)
+        jobs = Dictionary(keep.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        try rewrite()
     }
 
     func nextDue() async -> ActionJob? {
@@ -151,16 +182,56 @@ actor ActionQueue {
         try write([job])
     }
 
+    /// Steht am Ende der Datei kein Zeilenumbruch, ist die letzte Zeile
+    /// unvollstaendig.
+    private func needsNewline(_ handle: FileHandle) throws -> Bool {
+        let end = try handle.offset()
+        guard end > 0 else { return false }
+        try handle.seek(toOffset: end - 1)
+        let last = try handle.read(upToCount: 1)
+        try handle.seek(toOffset: end)
+        return last != Data([UInt8(ascii: "\n")])
+    }
+
     private func load() {
         guard !didLoad else { return }
         didLoad = true
         let decoder = JSONCoding.exactDecoder()
         guard let data = try? Data(contentsOf: fileURL) else { return }
+        var lineCount = 0
         for line in data.split(separator: UInt8(ascii: "\n")) where !line.isEmpty {
+            lineCount += 1
             // Eine abgeschnittene Zeile wird uebersprungen, der Rest bleibt gueltig.
             guard let job = try? decoder.decode(ActionJob.self, from: Data(line)) else { continue }
             remember(job)
         }
+        // Jede Zustandsaenderung ist eine neue Zeile; beim Laden gewinnt die
+        // letzte. Sind genug ueberholte Zeilen aufgelaufen, wird die Datei
+        // einmal neu geschrieben -- sonst waechst sie ueber Monate ins
+        // Unermessliche, und sie wird bei jedem Weckruf ganz gelesen.
+        if lineCount > max(Self.compactionFloor, order.count * 2) {
+            try? rewrite()
+        }
+    }
+
+    /// Schreibt die Datei neu: eine Zeile je Auftrag, letzter Stand.
+    private func rewrite() throws {
+        let encoder = JSONCoding.exactEncoder()
+        var data = Data()
+        for id in order {
+            guard let job = jobs[id] else { continue }
+            data.append(try encoder.encode(job))
+            data.append(UInt8(ascii: "\n"))
+        }
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: fileURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: fileURL.path
+        )
     }
 
     private func write(_ changed: [ActionJob]) throws {
@@ -183,9 +254,17 @@ actor ActionQueue {
                 throw CocoaError(.fileWriteUnknown)
             }
         }
-        let handle = try FileHandle(forWritingTo: fileURL)
+        // forUpdating, nicht forWritingTo: das letzte Byte muss gelesen
+        // werden, und aus einem reinen Schreibgriff laesst sich nicht lesen.
+        let handle = try FileHandle(forUpdating: fileURL)
         defer { try? handle.close() }
         try handle.seekToEnd()
+        // Ein Abschuss kann die letzte Zeile halbiert haben. Ohne diesen
+        // Zeilenumbruch klebte der neue Datensatz am kaputten Rest und waere
+        // damit selbst unlesbar -- der Auftrag ginge verloren.
+        if try needsNewline(handle) {
+            try handle.write(contentsOf: Data([UInt8(ascii: "\n")]))
+        }
         try handle.write(contentsOf: data)
         try handle.synchronize()
     }
