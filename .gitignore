@@ -1,0 +1,30 @@
+# Generiert durch XcodeGen
+*.xcodeproj/
+Info.plist
+HealthWake.entitlements
+# Xcode
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.mobileprovision
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output
+fastlane/new_certificate_needed.txt
+artifacts/
+buildlog/
+# Ruby
+vendor/
+.bundle/
+# Zugangsdaten -- duerfen hier niemals landen
+credentials.txt
+*.p8
+AuthKey_*.p8
+# macOS
+.DS_Store
+._*
