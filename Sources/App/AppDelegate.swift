@@ -11,6 +11,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Noch vor allem anderen: ohne Delegaten verwirft iOS jede
+        // Mitteilung, die im Vordergrund eintrifft.
+        ForegroundNotificationPresenter.install()
+
         let environment = environment
         Task { @MainActor in
             // Auftraege, die beim letzten Abschuss noch liefen, zuerst
