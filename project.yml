@@ -47,13 +47,18 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
+        # Basissprache der Oberflaeche. Wird zum Bezugspunkt, sobald
+        # weitere Sprachen dazukommen.
+        CFBundleDevelopmentRegion: en
+        # Diese Texte zeigt iOS im Berechtigungsdialog -- also in der
+        # Sprache der Oberflaeche, nicht in der des Quelltextes.
         NSHealthShareUsageDescription: >-
-          HealthWake beobachtet die von dir ausgewaehlten Werte und fuehrt
-          bei neuen Eintraegen die eingestellten Aktionen aus.
+          HealthWake watches the health types you select and runs your
+          configured actions whenever a new entry arrives.
         # Pflicht, sobald das HealthKit-Entitlement gesetzt ist -- altool
         # prueft statisch und weist den Upload sonst mit 90683 zurueck,
         # auch wenn die App nie schreibt. Der Text wird deshalb nie
         # angezeigt: requestAuthorization wird nur mit read aufgerufen.
         NSHealthUpdateUsageDescription: >-
-          HealthWake schreibt keine Werte nach Health. Die App liest
-          ausschliesslich die von dir ausgewaehlten Eintraege.
+          HealthWake never writes to Health. It only reads the entries
+          you select.

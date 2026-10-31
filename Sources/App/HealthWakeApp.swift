@@ -20,7 +20,7 @@ struct PlaceholderView: View {
                 .foregroundStyle(.tint)
             Text("HealthWake")
                 .font(.title2.weight(.semibold))
-            Text("Platzhalter zur Pruefung von Signatur und Entitlements.")
+            Text("Placeholder for verifying signing and entitlements.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
