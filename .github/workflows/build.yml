@@ -3,15 +3,32 @@ run-name: HealthWake bauen (${{ github.ref_name }})
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    # Reine Textaenderungen erzeugen keinen TestFlight-Build.
+    paths-ignore:
+      - "**.md"
+      - ".gitignore"
   schedule:
     # Am 1. jedes Monats um 06:17 UTC neu bauen, damit der TestFlight-Build
     # (90 Tage gueltig) nie ablaeuft. Abschalten: Variable SCHEDULED_BUILD=false.
     - cron: "17 6 1 * *"
 
+# Laeufe auf main werden gereiht, nicht parallel gefahren. Die Build-Nummer
+# entsteht aus "letzte TestFlight-Nummer + 1"; zwei gleichzeitige Laeufe
+# wuerden dieselbe Nummer vergeben und der zweite Upload scheitern.
+# Nicht abbrechen: ein laufender Upload soll fertig werden.
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check_certs:
     name: Zertifikate pruefen
-    if: github.event_name == 'workflow_dispatch' || vars.SCHEDULED_BUILD != 'false'
+    # SCHEDULED_BUILD steuert nur den Monatslauf. Push und Handstart
+    # bauen immer -- sonst wuerde das Abschalten des Monatslaufs auch
+    # jeden Push stillegen, weil "build" auf diesen Job wartet.
+    if: github.event_name != 'schedule' || vars.SCHEDULED_BUILD != 'false'
     uses: ./.github/workflows/create_certs.yml
     secrets: inherit
 
